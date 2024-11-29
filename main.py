@@ -1,7 +1,9 @@
 import os
 import requests
 import pandas as pd
+import re
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 class Scraper():
 
@@ -79,7 +81,8 @@ class Scraper():
             # iteration to scrape posts
             for post in content:
                 # get the title
-                title = post.find('h2', class_='poly-box poly-component__title').text
+                title = post.find('h2', class_='poly-box poly-component__title')
+                title = title.get_text().strip().capitalize()
 
                 # get the previous price
                 price_previous = post.find('s', class_='andes-money-amount andes-money-amount--previous andes-money-amount--cents-comma')
@@ -100,22 +103,38 @@ class Scraper():
                 discount = post.find('span', class_='andes-money-amount__discount')
                 discount = discount.get_text().strip() if discount else "0%"
 
+                # get data and time
+                data = datetime.now()
+                data_now = data.strftime("%d/%m/%Y %H:%M:%S")
+                
                 # get seller
                 seller = post.find('span', class_='poly-component__seller')
-                seller = seller.get_text().strip() if seller else "N/A"
+                #seller = seller.get_text().strip()[4:] if seller else "N/A"
+                seller = seller.get_text().strip()[4:].capitalize() if seller else "N/A"
 
                 # get installments
                 installments = post.find('span', class_='poly-price__installments poly-text-positive')
                 if installments:
                     installments = installments.get_text().strip()
-                    ad_type = 'premium'
+                    ad_type = 'Premium'
                 else:
                     installments = post.find('span', class_='poly-price__installments poly-text-primary')
                     installments = installments.get_text().strip() if installments else "N/A"
-                    ad_type = 'classic'
+                    ad_type = 'Classic'
 
                 # get the url post
                 post_link = post.find("a")["href"]
+               
+                # get mlb id from url post
+                if post_link and "MLB-" in post_link:
+                    start_index = post_link.find("MLB-")
+                    mlb_code = post_link[start_index:start_index + 14]  # "MLB-" (4 chars) + 10 chars = 14
+                elif post_link in post_link:
+                    pattern = r"MLB[^#]*"  # MLB seguido de qualquer sequência que não contenha '#'
+                    match = re.search(pattern, post_link)
+                    mlb_code = match.group(0)
+                else:
+                    mlb_code = "N/A"
 
                 # get the url image
                 try:
@@ -128,13 +147,15 @@ class Scraper():
 
                 # save in a dictionary
                 post_data = {
+                    "mlb": mlb_code,
                     "title": title,
+                    "seller": seller,
+                    "ad_type": ad_type,
                     "price_previous": price_previous,
                     "price_current": price_current,
                     "discount": discount,
                     "installments": installments,
-                    "ad_type:": ad_type, 
-                    "seller": seller,
+                    "date": data_now,
                     "post link": post_link,
                     "image link": img_link            
                 }
@@ -143,10 +164,10 @@ class Scraper():
                 c += 1
 
     def export_to_csv(self):
-        # Cria a pasta "data" se ela não existir
+        # Create the "data" folder if it does not exist
         os.makedirs("data", exist_ok=True)
         
-        # Exporta para um arquivo CSV em UTF-8
+        # Export to a CSV file in UTF-8
         df = pd.DataFrame(self.data)
         df.to_csv(r"data/mercadolibre_scraped_data.csv", sep=";", encoding="utf-8-sig", index=False)
         print("Arquivo CSV exportado com sucesso em UTF-8!")
